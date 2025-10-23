@@ -1,0 +1,18 @@
+{
+  "bge_reranker_usage": {
+    "description": "How to use BGE reranker",
+    "code": "\n# Load BGE reranker\nfrom app.bge_reranker import BGEReranker\nreranker = BGEReranker()\nreranker.load_model()  # Downloads model on first use\n\n# Rerank results\nreranked = reranker.rerank(query, documents, top_k=10)\n\n# Advanced reranking with score fusion\nfrom app.bge_reranker import AdvancedReranker\nadvanced = AdvancedReranker()\nadvanced.load_model()\nreranked = advanced.rerank_with_fusion(query, documents, top_k=10)\n"
+  },
+  "arabert_usage": {
+    "description": "How to use AraBERT integration",
+    "code": "\n# Load AraBERT model\nfrom app.arabert_integration import AraBERTIntegration\narabert = AraBERTIntegration()\narabert.load_model()  # Downloads model on first use\n\n# Create AraBERT index\nfrom app.arabert_integration import prepare_arabert_index\nprepare_arabert_index()\n\n# Use in hybrid search (0.7 mE5 / 0.3 AraBERT)\nfrom app.arabert_integration import HybridSearchWithAraBERT\nhybrid = HybridSearchWithAraBERT(me5_model, arabert_model, bm25_index, faiss_me5, faiss_arabert, meta)\nresults = hybrid.search(query, topk=10, fusion_method=\"weighted\")\n"
+  },
+  "synonym_usage": {
+    "description": "How to use synonym expansion",
+    "code": "\n# Load synonym expander\nfrom app.synonym_expander import QueryProcessor\nprocessor = QueryProcessor()\nprocessor.load()\n\n# Expand query with synonyms\nresult = processor.process_query(\"ما هو حد مسؤولية المشغل؟\", expand_synonyms=True, max_synonyms=2)\nprint(f\"Original: {result['original_query']}\")\nprint(f\"Expanded: {result['expanded_query']}\")\nprint(f\"Synonyms used: {result['synonyms_used']}\")\n"
+  },
+  "enhanced_usage": {
+    "description": "How to use enhanced retrieval system",
+    "code": "\n# Initialize enhanced system\nfrom app.enhanced_retrieval import EnhancedRetrievalSystem\nenhanced = EnhancedRetrievalSystem(\n    me5_model=me5_model,\n    bm25_index=bm25_index,\n    faiss_me5=faiss_me5,\n    meta=meta,\n    enable_arabert=True,\n    enable_reranker=True,\n    enable_synonyms=True\n)\n\n# Load quality boosters\nenhanced.load_quality_boosters()\n\n# Perform enhanced search\nresult = enhanced.search(\n    query=\"ما هو حد مسؤولية المشغل؟\",\n    topk=10,\n    fusion_method=\"weighted\",\n    enable_reranking=True,\n    enable_synonym_expansion=True\n)\n"
+  }
+}

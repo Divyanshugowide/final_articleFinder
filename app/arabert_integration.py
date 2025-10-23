@@ -1,13 +1,19 @@
 """
 AraBERT-v3 Integration for Enhanced Arabic Search
-Phase 10 - Next Sprint Hooks
+Quality Booster for Week-2 - Second Embedding Index
 """
 
 import torch
 from sentence_transformers import SentenceTransformer
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import numpy as np
 from pathlib import Path
+import logging
+import json
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class AraBERTIntegration:
     """
@@ -104,7 +110,7 @@ class AraBERTIntegration:
 
 class HybridSearchWithAraBERT:
     """
-    Enhanced hybrid search combining mE5 and AraBERT
+    Enhanced hybrid search combining mE5 and AraBERT with weighted fusion
     """
     
     def __init__(self, me5_model, arabert_model, bm25_index, faiss_me5, faiss_arabert, meta):
@@ -116,7 +122,8 @@ class HybridSearchWithAraBERT:
         self.meta = meta
         
     def search(self, query: str, topk: int = 10, 
-               me5_weight: float = 0.4, arabert_weight: float = 0.3, bm25_weight: float = 0.3):
+               me5_weight: float = 0.7, arabert_weight: float = 0.3, bm25_weight: float = 0.0,
+               fusion_method: str = "weighted"):
         """
         Perform hybrid search with mE5, AraBERT, and BM25
         
@@ -126,10 +133,21 @@ class HybridSearchWithAraBERT:
             me5_weight: Weight for mE5 semantic search
             arabert_weight: Weight for AraBERT semantic search
             bm25_weight: Weight for BM25 keyword search
+            fusion_method: "weighted" or "rrf" (Reciprocal Rank Fusion)
             
         Returns:
             List of search results
         """
+        logger.info(f"Performing hybrid search with {fusion_method} fusion")
+        
+        if fusion_method == "rrf":
+            return self._search_with_rrf(query, topk, me5_weight, arabert_weight, bm25_weight)
+        else:
+            return self._search_with_weighted_fusion(query, topk, me5_weight, arabert_weight, bm25_weight)
+    
+    def _search_with_weighted_fusion(self, query: str, topk: int, 
+                                   me5_weight: float, arabert_weight: float, bm25_weight: float):
+        """Weighted fusion approach"""
         # Normalize weights
         total_weight = me5_weight + arabert_weight + bm25_weight
         me5_weight /= total_weight
@@ -152,7 +170,7 @@ class HybridSearchWithAraBERT:
         combined_scores = {}
         
         # Add BM25 scores
-        for i, idx in enumerate(bm5_indices):
+        for i, idx in enumerate(bm25_indices):
             if idx < len(self.meta):
                 score = bm25_scores[idx] * bm25_weight
                 combined_scores[idx] = combined_scores.get(idx, 0) + score
@@ -178,6 +196,59 @@ class HybridSearchWithAraBERT:
             if idx < len(self.meta):
                 result = self.meta[idx].copy()
                 result['score'] = float(score)
+                result['fusion_method'] = 'weighted'
+                results.append(result)
+        
+        return results
+    
+    def _search_with_rrf(self, query: str, topk: int, 
+                        me5_weight: float, arabert_weight: float, bm25_weight: float):
+        """Reciprocal Rank Fusion approach"""
+        k = 60  # RRF parameter
+        
+        # Get BM25 results
+        bm25_scores = self.bm25_index.get_scores(query.split())
+        bm25_indices = np.argsort(bm25_scores)[::-1][:topk*2]
+        
+        # Get mE5 results
+        me5_query_embedding = self.me5_model.encode([query])
+        me5_scores, me5_indices = self.faiss_me5.search(me5_query_embedding, topk*2)
+        
+        # Get AraBERT results
+        arabert_query_embedding = self.arabert_model.encode_texts([query])
+        arabert_scores, arabert_indices = self.faiss_arabert.search(arabert_query_embedding, topk*2)
+        
+        # Calculate RRF scores
+        rrf_scores = {}
+        
+        # BM25 RRF scores
+        for rank, idx in enumerate(bm25_indices):
+            if idx < len(self.meta):
+                rrf_score = bm25_weight / (k + rank + 1)
+                rrf_scores[idx] = rrf_scores.get(idx, 0) + rrf_score
+        
+        # mE5 RRF scores
+        for rank, idx in enumerate(me5_indices[0]):
+            if idx < len(self.meta):
+                rrf_score = me5_weight / (k + rank + 1)
+                rrf_scores[idx] = rrf_scores.get(idx, 0) + rrf_score
+        
+        # AraBERT RRF scores
+        for rank, idx in enumerate(arabert_indices[0]):
+            if idx < len(self.meta):
+                rrf_score = arabert_weight / (k + rank + 1)
+                rrf_scores[idx] = rrf_scores.get(idx, 0) + rrf_score
+        
+        # Sort by RRF score
+        sorted_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+        
+        # Return top results
+        results = []
+        for idx, score in sorted_results[:topk]:
+            if idx < len(self.meta):
+                result = self.meta[idx].copy()
+                result['score'] = float(score)
+                result['fusion_method'] = 'rrf'
                 results.append(result)
         
         return results
