@@ -59,7 +59,7 @@ def home():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔍 الباحث القانوني النووي ⚖️</title>
+<title>🔍 تكستسكوب للذكاء الاصطناعي – بحث ذكي عن المستندات في مختلف المجالات ⚖️</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -509,8 +509,8 @@ mark[style*="lightgreen"] {
 </head>
 <body>
 <div class="header">
-  <h1>🔍 الباحث القانوني النووي</h1>
-  <p>محرك بحث ذكي للأنظمة والقوانين النووية مع تمييز النتائج بالألوان</p>
+  <h1>🔍 تكست سكوب للذكاء الاصطناعي</h1>
+  <p>البحث الذكي عن المستندات عبر المجالات</p>
   <div id="userInfo" class="user-info hidden">
     <span id="userName"></span>
     <span id="userRoles"></span>
