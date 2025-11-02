@@ -1,0 +1,360 @@
+# DEPLOYMENT GUIDE: NRRC Arabic PoV System
+# Frontend on Vercel + Backend on Render
+
+==================================================
+PART 1: BACKEND DEPLOYMENT ON RENDER
+==================================================
+
+## Prerequisites
+- GitHub account with your code pushed to a repository
+- Render account (sign up at https://render.com)
+
+## Step 1: Prepare Your Backend Repository
+1. Ensure your backend folder structure is:
+   backend/
+   ├── app/
+   │   ├── __init__.py
+   │   ├── api.py (your FastAPI app)
+   │   ├── auth.py
+   │   ├── retrieval.py
+   │   ├── chunking.py
+   │   ├── normalize.py
+   │   ├── bge_reranker.py
+   │   ├── arabert_integration.py
+   │   ├── synonym_expander.py
+   │   └── enhanced_retrieval.py
+   ├── data/
+   │   ├── idx/
+   │   │   ├── bm25.pkl
+   │   │   ├── mE5.faiss
+   │   │   └── meta.json
+   │   ├── processed/
+   │   └── raw_pdfs/
+   ├── conf/
+   │   └── glossary_ar.json
+   ├── requirements.txt
+   ├── start.sh
+   └── Dockerfile (optional)
+
+2. Create a start.sh file in backend/:
+   #!/bin/bash
+   export PYTHONIOENCODING=utf-8
+   export TRANSFORMERS_CACHE=/app/.cache/transformers
+   exec uvicorn app.api:app --host 0.0.0.0 --port $PORT
+
+3. Make it executable:
+   chmod +x backend/start.sh
+
+## Step 2: Deploy to Render
+
+### Option A: Web Service Deployment
+1. Go to https://dashboard.render.com/
+2. Click "New +" > "Web Service"
+3. Connect your GitHub repository
+4. Configure:
+   - Name: nrrc-backend
+   - Root Directory: backend
+   - Environment: Python 3
+   - Build Command: pip install -r requirements.txt
+   - Start Command: bash start.sh
+
+5. Environment Variables (Add in Render Dashboard):
+   - PYTHONIOENCODING=utf-8
+   - SECRET_KEY=your-secret-key-here (generate a strong random string)
+   - TRANSFORMERS_CACHE=/opt/render/.cache/transformers
+
+6. Choose your plan (Free tier available)
+7. Click "Create Web Service"
+
+### Option B: Docker Deployment (Recommended for larger apps)
+1. Ensure Dockerfile is in backend/ folder
+2. In Render:
+   - Root Directory: backend
+   - Environment: Docker
+   - Build Command: (leave empty)
+   - Start Command: (leave empty)
+
+## Step 3: Get Your Backend URL
+- After deployment, Render will provide a URL like:
+  https://nrrc-backend.onrender.com
+- Note this URL for frontend configuration
+
+## Step 4: Build Your Index Files
+1. SSH into your Render instance (if possible) or use local machine
+2. Run indexing scripts:
+   cd backend
+   python scripts/02_extract_and_chunk.py
+   python scripts/03_build_bm25.py
+   python scripts/04_build_faiss.py
+
+3. Commit and push data/idx/ folder to Git
+4. Render will rebuild with your indices
+
+==================================================
+PART 2: FRONTEND DEPLOYMENT ON VERCEL
+==================================================
+
+## Prerequisites
+- Vercel account (sign up at https://vercel.com)
+- Frontend folder prepared
+
+## Step 1: Prepare Frontend
+1. Your frontend folder should have:
+   frontend/
+   ├── index.html
+   └── (optional: package.json for custom config)
+
+2. Update API URL in frontend/index.html:
+   Change line in JavaScript:
+   const API_URL = 'https://your-render-backend-url.onrender.com';
+
+## Step 2: Deploy to Vercel
+
+### Option A: Via Vercel Dashboard
+1. Go to https://vercel.com/dashboard
+2. Click "Add New" > "Project"
+3. Import your GitHub repository
+4. Configure:
+   - Framework Preset: Other
+   - Root Directory: frontend
+   - Build Command: (leave empty for static HTML)
+   - Output Directory: . (or leave empty)
+
+5. Add Environment Variable:
+   - REACT_APP_API_URL: https://your-render-backend-url.onrender.com
+
+6. Click "Deploy"
+
+### Option B: Via Vercel CLI (Recommended)
+1. Install Vercel CLI:
+   npm i -g vercel
+
+2. Navigate to your project:
+   cd frontend
+
+3. Login to Vercel:
+   vercel login
+
+4. Deploy:
+   vercel
+
+5. Follow prompts:
+   - Set up and deploy: Y
+   - Which scope: (your account)
+   - Link to existing project: N
+   - Project name: nrrc-frontend
+   - Directory: ./
+   - Override settings: N
+
+6. For production deployment:
+   vercel --prod
+
+## Step 3: Update Environment Variables in Vercel
+1. Go to Project Settings > Environment Variables
+2. Add:
+   - REACT_APP_API_URL = https://your-backend-url.onrender.com
+3. Redeploy the application
+
+## Step 4: Configure CORS in Backend
+1. In backend/app/api.py, update CORS:
+   app.add_middleware(
+       CORSMiddleware,
+       allow_origins=["https://your-vercel-app.vercel.app"],
+       allow_credentials=True,
+       allow_methods=["*"],
+       allow_headers=["*"],
+   )
+
+2. Redeploy backend
+
+==================================================
+PART 3: TESTING DEPLOYMENT
+==================================================
+
+## Backend Testing
+1. Test health endpoint:
+   curl https://your-backend-url.onrender.com/health
+   Expected: {"status":"healthy","message":"System is ready"}
+
+2. Test login:
+   curl -X POST https://your-backend-url.onrender.com/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"admin","password":"admin123"}'
+   Expected: {"access_token":"...","token_type":"bearer"}
+
+3. Test search (requires token):
+   curl -X POST https://your-backend-url.onrender.com/ask \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer YOUR_TOKEN" \
+     -d '{"query":"test","topk":5}'
+
+## Frontend Testing
+1. Open https://your-vercel-app.vercel.app
+2. Try logging in with test accounts
+3. Perform a search query
+4. Verify results display correctly
+
+==================================================
+PART 4: TROUBLESHOOTING
+==================================================
+
+## Common Issues
+
+### Backend Issues:
+
+1. "Module not found" errors:
+   - Check requirements.txt includes all dependencies
+   - Verify Root Directory is set to "backend" in Render
+
+2. "File not found" errors:
+   - Ensure data/idx/ files are committed to Git
+   - Check file paths in code (use relative paths)
+
+3. Out of memory errors:
+   - Upgrade Render plan
+   - Optimize model loading
+   - Use smaller model variants
+
+4. Slow startup:
+   - Pre-build Docker image
+   - Use volume mounting for cache
+   - Consider persistent storage
+
+5. CORS errors:
+   - Update allow_origins in api.py
+   - Include http:// and https:// origins
+   - Redeploy backend after changes
+
+### Frontend Issues:
+
+1. "Cannot connect to backend":
+   - Verify API_URL is correct in index.html
+   - Check CORS settings in backend
+   - Ensure backend is running
+
+2. "404 Not Found":
+   - Check Vercel deployment logs
+   - Verify index.html is in root directory
+   - Check framework preset
+
+3. Environment variables not working:
+   - Redeploy after adding variables
+   - Check variable names match code
+   - Verify variable format
+
+4. Authentication not working:
+   - Check token storage in browser
+   - Verify JWT secret is set in backend
+   - Check network requests in DevTools
+
+==================================================
+PART 5: DOMAIN CUSTOMIZATION
+==================================================
+
+## Custom Domain for Vercel
+1. Go to Project Settings > Domains
+2. Add your custom domain
+3. Configure DNS records as instructed
+4. SSL certificate auto-provisioned
+
+## Custom Domain for Render
+1. Go to Service Settings > Custom Domain
+2. Add your domain
+3. Configure DNS CNAME to Render's domain
+4. SSL auto-generated
+
+==================================================
+PART 6: MONITORING & MAINTENANCE
+==================================================
+
+## Monitoring
+1. Render Dashboard:
+   - View logs in real-time
+   - Check uptime
+   - Monitor resource usage
+
+2. Vercel Analytics:
+   - Enable in project settings
+   - View performance metrics
+   - Check error rates
+
+## Updates & Redeployment
+1. Push changes to GitHub
+2. Both platforms auto-deploy on push
+3. Monitor deployment logs
+4. Test after deployment
+
+## Backup Strategy
+1. Backup data/ folder regularly
+2. Commit indices to Git
+3. Store secrets in environment variables
+4. Keep deployment logs
+
+==================================================
+PART 7: COST OPTIMIZATION
+==================================================
+
+## Free Tier Limits
+1. Render:
+   - Web service spins down after inactivity
+   - 750 hours/month free
+   - Slower cold starts
+
+2. Vercel:
+   - 100GB bandwidth/month
+   - Unlimited deployments
+   - Edge functions included
+
+## Cost Reduction Tips
+1. Use CDN for static assets
+2. Optimize Docker images
+3. Cache API responses
+4. Use smaller models for demo
+5. Monitor resource usage
+
+==================================================
+PART 8: SECURITY CONSIDERATIONS
+==================================================
+
+## Production Security
+1. Change default passwords
+2. Use strong SECRET_KEY
+3. Enable HTTPS (automatic on Render/Vercel)
+4. Restrict CORS origins
+5. Rate limiting (consider Cloudflare)
+6. Regular dependency updates
+7. Monitor for vulnerabilities
+
+## Recommended Changes
+1. Replace test users with real authentication
+2. Implement database instead of in-memory storage
+3. Add API rate limiting
+4. Enable request logging
+5. Set up error monitoring (Sentry)
+
+==================================================
+QUICK REFERENCE
+==================================================
+
+Backend URL: https://your-backend.onrender.com
+Frontend URL: https://your-frontend.vercel.app
+API Endpoints:
+  - POST /login - Authentication
+  - GET /me - User info
+  - POST /ask - Search
+  - GET /health - Health check
+
+Test Accounts:
+  - admin / admin123
+  - legal / legal123
+  - staff / staff123
+
+Support:
+  - Render Docs: https://render.com/docs
+  - Vercel Docs: https://vercel.com/docs
+  - FastAPI Docs: https://fastapi.tiangolo.com
+
+==================================================
+END OF DEPLOYMENT GUIDE
+==================================================
+
