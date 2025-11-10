@@ -60,10 +60,12 @@ else:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=["*"],  # WARNING: In production, replace with specific origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    allow_origin_regex="https://.*\\.ngrok-free\\.app"
 )
 
 
@@ -90,6 +92,8 @@ def root():
         os.path.join(project_root, "frontend", "index.html"),  # project_root/frontend/index.html
         os.path.join(backend_dir, "..", "frontend", "index.html"),  # Fallback
     ]
+    # Also check nginx default html directory (when running in Docker)
+    possible_paths.insert(0, "/usr/share/nginx/html/index.html")
     
     frontend_path = None
     for path in possible_paths:
@@ -145,13 +149,16 @@ def health_check():
 @app.post("/login", response_model=Token)
 async def login(login_data: LoginRequest):
     """Login endpoint to get access token"""
+    print(f"[DEBUG] Login attempt for user: {login_data.username}")
     user = authenticate_user(login_data.username, login_data.password)
     if not user:
+        print(f"[DEBUG] Authentication failed for user: {login_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    print(f"[DEBUG] Authentication successful for user: {login_data.username}")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user["username"]}, expires_delta=access_token_expires
@@ -333,4 +340,6 @@ async def rebuild_indices_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to rebuild indices: {str(e)}"
         )
+
+from fastapi.middleware.cors import CORSMiddleware
 
